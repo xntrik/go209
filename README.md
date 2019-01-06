@@ -1,5 +1,7 @@
 # go209
 
+[![GoDoc](https://img.shields.io/badge/godoc-reference-5272B4.svg?style=for-the-badge)](https://godoc.org/github.com/xntrik/go209/pkg/go209)
+
 Hi, I'm a slack bot written in Go. My name is inspired from one of the dumbest-smart robots out there, good ol' [ED-209](https://www.youtube.com/watch?v=A9l9wxGFl4k). 
 
 Instead of being triggered with a `/slack` command, you interact with go209 through DMs. By definining a relatively simple JSON files, you can make go209 respond to various terms. Not only that, but you can also define linear or branching Q/A interactions with go209 too! Responses to these interactions can then be processed by arbitrary modules, for instance, emailing you the results.
@@ -79,14 +81,14 @@ This will start a redis container, and the two go209 containers. You can read mo
 
 go209 requires a few different ENV VARs setup to run, but don't worry, you can just plonk them in your `.env` file.
 
-- `SLACK_TOKEN` ** This is the Slack Bot User OAuth Access Token (required) ** See below under Slack Setup
-- `SLACK_SIGNING_TOKEN` ** This is the Slack Bot Signing Secret (required) ** See below under Slack Setup
-- `REDIS_ADDR` ** Points to your redis instance. (required) ** If using docker-compose, set this to `redis:6379`
-- `REDIS_PWD` ** If your redis requires authentication **
-- `REDIS_DB` ** If you want to use a redis DB other than 0 **
-- `JSON_RULES` ** go209 comes with a sample rules.json, if you want to point to the location of a different file, set it here **
-- `WEB_ADDR` ** This sets the go209 web server listening interface **
-- `DYNAMIC_MODULES` ** If you want to load further modules, after you've compiled them, set their names here ** See below under Modules
+- `SLACK_TOKEN` **This is the Slack Bot User OAuth Access Token (required)** See below under Slack Setup
+- `SLACK_SIGNING_TOKEN` **This is the Slack Bot Signing Secret (required)** See below under Slack Setup
+- `REDIS_ADDR` **Points to your redis instance. (required)** If using docker-compose, set this to `redis:6379`
+- `REDIS_PWD` **If your redis requires authentication**
+- `REDIS_DB` **If you want to use a redis DB other than 0**
+- `JSON_RULES` **go209 comes with a sample rules.json, if you want to point to the location of a different file, set it here**
+- `WEB_ADDR` **This sets the go209 web server listening interface**
+- `DYNAMIC_MODULES` **If you want to load further modules, after you've compiled them, set their names here** See below under Modules
 
 Any modules that require env vars will also be displayed, for instance, if you want to send emails.
 
@@ -101,11 +103,11 @@ Any modules that require env vars will also be displayed, for instance, if you w
 7. From here, you'll see the `Bot User OAuth Access Token`, set this to your `SLACK_TOKEN`
 8. The `SLACK_SIGNING_SECRET` is available under the `Signing Secret` portion under `App Credentials` on the `Basic Information` page.
 
-![Create a Slack App](https://imgur.com/a/6q5YQhy)
+![Create a Slack App](https://i.imgur.com/VSZcW6f.png)
 
-![Bot User](https://imgur.com/a/747A2qk)
+![Bot User](https://i.imgur.com/yO0Rjq5.png)
 
-![OAuth Tokens](https://imgur.com/a/WqaRVVT)
+![OAuth Tokens](https://i.imgur.com/O6retDp.png)
 
 To handle interactive attachments, such as menu drop downs or button selection, you need to ensure that the web hook callback is configured to hit your instance of go209. You must have TLS configured, or else slack won't connect properly. go209 doesn't terminate TLS, so I would recommend spinning up a simple nginx in front of the web portion. (or ELB/ALB).
 
@@ -113,7 +115,7 @@ To handle interactive attachments, such as menu drop downs or button selection, 
 2. Click `Interactivity` to on
 3. Enter the URL into the `Request URL` that can hit your running instance of `go209 web`, for instance `https://yourdomain.com/slack/message_handler`
 
-![Interactive Components](https://imgur.com/a/zIgiUTw)
+![Interactive Components](https://i.imgur.com/cgmVfvr.png)
 
 ### Rules JSON
 
