@@ -1,5 +1,6 @@
 # go209
 
+[![Travis CI](https://img.shields.io/travis/xntrik/go209.svg?style=for-the-badge)](https://travis-ci.org/xntrik/go209)
 [![GoDoc](https://img.shields.io/badge/godoc-reference-5272B4.svg?style=for-the-badge)](https://godoc.org/github.com/xntrik/go209/pkg/go209)
 
 Hi, I'm a slack bot written in Go. My name is inspired from one of the dumbest-smart robots out there, good ol' [ED-209](https://www.youtube.com/watch?v=A9l9wxGFl4k). 
