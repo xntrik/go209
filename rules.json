@@ -1,0 +1,92 @@
+{
+  "rules": [
+    {
+      "terms": ["help", "what can you do"],
+      "response": "This is the help screen\nSome things I understand:\n'simple questionnaire'\n'pizza questionnaire'\n"
+    },
+    {
+      "terms": ["simple questionnaire"],
+      "response": "Hey {{.Username}}, I'm going to ask you some questions. If you want to finish early, just send me the word 'stop'.",
+      "interactions": [
+        {
+          "interaction_id": "q1",
+          "stop_word": "stop",
+          "type": "text",
+          "question": "How was your day yesterday?",
+          "next_interaction": "q2"
+        },
+        {
+          "interaction_id": "q2",
+          "stop_word": "stop",
+          "type": "text",
+          "question": "Do you think you'll have a good day tomorrow?",
+          "next_interaction": "end"
+        }
+      ],
+      "interaction_start": "q1"
+    },
+    {
+    "terms": ["pizza questionnaire"],
+    "response": "A quick q",
+    "interactions": [
+      {
+        "interaction_id": "a1",
+        "stop_word": "stop",
+        "type": "attachment",
+        "question": "Do you like pineapple on pizza?",
+        "attachment": {
+          "fallback": "Do you like pineapple on pizza?",
+          "callback_id": "a1",
+          "actions": [
+            {
+              "name": "pineapple",
+              "text": "Yes",
+              "style": "danger",
+              "type": "button",
+              "value": "yes",
+              "confirm": {
+                "title": "Are you sure?",
+                "text": "You actually like pineapple on pizza?",
+                "ok_text": "Yes",
+                "dismiss_text": "No"
+              }
+            },
+            {
+              "name": "pineapple",
+              "text": "No",
+              "type": "button",
+              "value": "no"
+            }
+          ]
+        },
+        "next_interaction_dynamic": [
+          {
+            "response": "no",
+            "next_interaction": "end"
+          },
+          {
+            "response": "yes",
+            "next_interaction": "a2"
+          }
+        ],
+        "next_interaction": "end"
+      },
+      {
+        "interaction_id": "a2",
+        "stop_word": "stop",
+        "type": "text",
+        "question": "Why do you like pineapple on pizza?",
+        "next_interaction": "end"
+      }
+    ],
+    "interaction_start": "a1"
+    },
+    {
+      "terms": ["what is my userid", "what's my userid", "what is my user id", "what's my user id"],
+      "response": "[[Hi||Hey]] {{.Username}}, your User ID is '{{.UserID}}'"
+    }
+  ],
+  "default": "[[Hi||Heylo||Hey]] {{.Username}}. How's [[things||stuff]]? For help simply ask for \"help\", or ask me what I can do",
+  "interaction_cancelled_response": "Thanks {{.Username}}, this interaction is cancelled",
+  "interaction_complete_response": "Thanks {{.Username}}, we'll get back to you shortly"
+}

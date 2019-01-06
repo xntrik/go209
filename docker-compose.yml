@@ -1,0 +1,20 @@
+version: '3'
+services:
+  slackbot:
+    build: .
+    env_file:
+      - ".env"
+    command: start
+    links:
+      - redis
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - ".env"
+    command: web
+    links:
+      - redis
+  redis:
+    image: redis

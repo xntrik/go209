@@ -1,0 +1,6 @@
+.DS_Store
+.env
+/go209
+/dist
+/cross
+*.so
