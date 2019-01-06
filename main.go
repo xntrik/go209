@@ -1,10 +1,7 @@
 package main
 
 import (
-	// "bytes"
-	// "crypto/tls"
 	"fmt"
-	// "net/smtp"
 	"os"
 	"strings"
 
