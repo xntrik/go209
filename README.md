@@ -20,6 +20,7 @@ Instead of being triggered with a `/slack` command, you interact with go209 thro
 
 ```console
 $ go get github.com/xntrik/go209
+$ cd <into go209 folder - often ~/go/src/github.com/xntrik/go209>
 $ make buildplugins
 ```
 
