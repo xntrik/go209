@@ -1,0 +1,10 @@
+language: go
+sudo: false
+go:
+  - 1.11.x
+before_install:
+  - go get golang.org/x/lint/golint
+jobs:
+  include:
+    - script: make all
+
