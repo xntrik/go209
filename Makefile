@@ -1,5 +1,6 @@
 NAME := go209
 PKG := github.com/xntrik/go209
+REPO := xntrik
 
 SHELL := /bin/bash
 PREFIX?=$(shell pwd)
@@ -7,6 +8,7 @@ BUILDDIR := ${PREFIX}/cross
 PLUGINDIR := ${PREFIX}/pkg/go209/modules
 PLUGINS := $(wildcard $(PLUGINDIR)/*.go)
 PLUGINSOUT := $(patsubst $(PLUGINDIR)/%.go, $(PREFIX)/%.so, $(PLUGINS))
+
 .DEFAULT_GOAL := help
 
 GO := go
@@ -65,6 +67,11 @@ vet: ## Verifies `go vet` passes.
 .PHONY: image
 image: clean ## Create docker image from the Dockerfile
 	@docker build --rm --force-rm -t $(NAME) .
+
+.PHONY: imagepush
+imagepush: clean ## Create a fresh docker image and push to the configured repo
+	@docker build --rm --force-rm -t $(REPO)/$(NAME):latest .
+	@docker push $(REPO)/$(NAME)
 
 .PHONY: docker-compose-build
 docker-compose-build: clean ## Build the docker compose

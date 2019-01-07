@@ -25,6 +25,13 @@ $ cd <into go209 folder - often ~/go/src/github.com/xntrik/go209>
 $ make buildplugins
 ```
 
+### Via Docker
+
+```console
+$ docker pull xntrik/go209
+$ docker run --rm xntrik/go209 -h
+```
+
 ## Usage
 
 ```console
