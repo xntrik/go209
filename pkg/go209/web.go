@@ -88,6 +88,8 @@ func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handl
 		rawBody, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Warn(fmt.Sprintf("Error reading Body: %s", err))
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
 		// Clone the body
@@ -101,17 +103,23 @@ func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handl
 		//Validating sig
 		sv, err := slack.NewSecretsVerifier(r.Header, cfg.SlackSigningSecret)
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Error generating new secrets verifier: %s", err))
+			log.Warn(fmt.Sprintf("Error generating new secrets verifier: %s", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		_, err = sv.Write(bodyData)
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Error writing body to hmac: %s", err))
+			log.Warn(fmt.Sprintf("Error writing body to hmac: %s", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		err = sv.Ensure()
 		if err != nil {
-			log.Fatal(fmt.Sprintf("Error validating HMAC!"))
+			log.Warn(fmt.Sprintf("Error validating HMAC!"))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
 		}
 
 		// Now we parse the body for conversion into a slack struct
