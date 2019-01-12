@@ -152,7 +152,7 @@ func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handl
 			// Found a previous state, therefore we're going to carry on
 			// We are in an active interaction now!
 			// spew.Dump(val)
-			log.Info(fmt.Sprintf("User %s (%s) has responded to interaction %s", val["username"], val["userid"], val["interaction"]))
+			log.Info(fmt.Sprintf("User %s (%s) has responded to interaction %s", val["username"], val["userid"], cbID))
 
 			err = db.HSet(redKey, fmt.Sprintf("response:%s", cbID), selected).Err()
 			if err != nil {
