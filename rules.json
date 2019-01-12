@@ -76,6 +76,38 @@
         "stop_word": "stop",
         "type": "text",
         "question": "Why do you like pineapple on pizza?",
+        "next_interaction": "a3"
+      },
+      {
+        "interaction_id": "a3",
+        "stop_word": "stop",
+        "type": "attachment",
+        "question": "Okay, but surely there's at least one other thing you like with pineapple:",
+        "attachment": {
+          "fallback": "What else you like with pineapple",
+          "callback_id": "a3",
+          "actions": [
+            {
+              "name": "othertopping",
+              "text": "Pick a topping..",
+              "type": "select",
+              "options": [
+                {
+                  "text": "Ham",
+                  "value": "ham"
+                },
+                {
+                  "text": "Anchovies",
+                  "value": "anchovies"
+                },
+                {
+                  "text": "Sausage",
+                  "value": "sausage"
+                }
+              ]
+            }
+          ]
+        },
         "next_interaction": "end"
       }
     ],
