@@ -135,7 +135,16 @@ func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handl
 
 		redKey := fmt.Sprintf("%s:%s", interactioncb.Team.ID, interactioncb.Channel.ID)
 		cbID := interactioncb.CallbackID
-		selected := interactioncb.ActionCallback.Actions[0].Value
+		selected := ""
+		if interactioncb.ActionCallback.Actions[0].Type == "select" {
+			// The user has submitted a select menu item
+			if len(interactioncb.ActionCallback.Actions[0].SelectedOptions) == 1 {
+				selected = interactioncb.ActionCallback.Actions[0].SelectedOptions[0].Value
+			}
+		} else {
+			// The user has simply clicked a button
+			selected = interactioncb.ActionCallback.Actions[0].Value
+		}
 
 		val, err := db.HGetAll(redKey).Result()
 		if err != nil {
