@@ -4,6 +4,7 @@ MAINTAINER Christian Frichot <xntrik@gmail.com>
 RUN apk add bash ca-certificates git gcc g++ libc-dev libgcc make
 WORKDIR /go/src/github.com/xntrik/go209
 COPY . .
+RUN make clean
 RUN go get
 RUN STATIC_BUILD=1 make buildplugins
 RUN make static
