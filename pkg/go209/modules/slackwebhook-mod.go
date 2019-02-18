@@ -47,9 +47,9 @@ func (sm slackWebhookModule) Run(in interface{}, ev map[string]string, interacti
 	}
 	uri := ev["SLACKWEBHOOKMODULE_URL"]
 
+	// Construct the attachment for the message
 	now := time.Now()
 	secs := now.Unix()
-
 	att1 := myAttachment{
 		Fallback: "go209 received a complete response from someone",
 		Color:    "#36a64f",
@@ -57,28 +57,43 @@ func (sm slackWebhookModule) Run(in interface{}, ev map[string]string, interacti
 		Ts:       secs,
 	}
 
+	// Extract the userid from the input
 	switch i := in.(type) {
 	case map[string]string:
 		for k, v := range i {
 			if k == "userid" {
 				att1.Text = fmt.Sprintf("Response from <@%s>", v)
-			} else if strings.HasPrefix(k, "response:") {
-				f := myAttachmentField{
-					Title: k,
-					Value: v,
-					Short: false,
-				}
-				att1.Fields = append(att1.Fields, f)
 			}
 		}
 	}
+
+	// Iterate over interactions, and extract results from the input
+	switch i := in.(type) {
+	case map[string]string:
+		for interactionkey, interactionval := range interactions {
+			for inkey, inval := range i {
+				if strings.HasPrefix(inkey, "response:") {
+					inkey = strings.TrimPrefix(inkey, "response:")
+					if interactionkey == inkey {
+						f := myAttachmentField{
+							Title: interactionval,
+							Value: inval,
+							Short: false,
+						}
+						att1.Fields = append(att1.Fields, f)
+					}
+				}
+			}
+		}
+	}
+
+	// Raw body to send Slack webhook
 	msg := &myWebhookBody{
 		Text: "go209 received a complete response from someone",
 	}
 	msg.Attachments = append(msg.Attachments, att1)
 
 	jsonMarshal, _ := json.Marshal(msg)
-
 	jsonStr := []byte(string(jsonMarshal))
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(jsonStr))
 	req.Header.Set("Content-Type", "application/json")
@@ -94,7 +109,6 @@ func (sm slackWebhookModule) Run(in interface{}, ev map[string]string, interacti
 		return err
 	}
 	defer resp.Body.Close()
-	fmt.Printf("%v\n", resp)
 
 	return nil
 }
