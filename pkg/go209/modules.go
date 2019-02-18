@@ -19,7 +19,7 @@ var modules = LoadedModules{}
 type Module interface {
 	Name() string
 	EnvVars() []string
-	Run(in interface{}, ev map[string]string) error
+	Run(in interface{}, ev map[string]string, interactions map[string]string) error
 }
 
 // LoadedModules is a struct we use to hold modules and load modules etc

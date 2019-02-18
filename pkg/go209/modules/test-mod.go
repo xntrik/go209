@@ -14,7 +14,7 @@ func (tm testModule) EnvVars() []string {
 	return []string{"One", "Two"}
 }
 
-func (tm testModule) Run(in interface{}, ev map[string]string) error {
+func (tm testModule) Run(in interface{}, ev map[string]string, interactions map[string]string) error {
 	fmt.Println("******* MODULE RUNNING!")
 	fmt.Printf("%v\n", in)
 	fmt.Printf("%v\n", ev)

@@ -378,8 +378,14 @@ func handleDM(rtm *slack.RTM, rules *RuleSet, msg, team, channel, user, username
 										evSet[adjusted] = os.Getenv(adjusted)
 									}
 
+									// Set the interactions
+									interactions := make(map[string]string)
+									for _, i := range thisRule.Interactions {
+										interactions[i.InteractionID] = i.Question
+									}
+
 									// Running the module
-									err = mod.Run(finalval, evSet)
+									err = mod.Run(finalval, evSet, interactions)
 									if err != nil {
 										log.Warn(fmt.Sprintf("Error running module: %s", err))
 									}

@@ -18,7 +18,7 @@ func (tm emailModule) EnvVars() []string {
 	return []string{"FROM", "TO", "SMTPSERVER", "USERNAME", "PASSWORD", "SKIPTLS"}
 }
 
-func (tm emailModule) Run(in interface{}, ev map[string]string) error {
+func (tm emailModule) Run(in interface{}, ev map[string]string, interactions map[string]string) error {
 	if len(ev["EMAILMODULE_SKIPTLS"]) > 0 {
 		// Sending plaintext email
 		Sender := ev["EMAILMODULE_FROM"]

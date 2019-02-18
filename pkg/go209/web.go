@@ -249,8 +249,14 @@ func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handl
 										evSet[adjusted] = os.Getenv(adjusted)
 									}
 
+									// Set the interactions
+									interactions := make(map[string]string)
+									for _, i := range thisRule.Interactions {
+										interactions[i.InteractionID] = i.Question
+									}
+
 									// Running the module
-									err = mod.Run(finalval, evSet)
+									err = mod.Run(finalval, evSet, interactions)
 									if err != nil {
 										log.Warn(fmt.Sprintf("Error running module: %s", err))
 									}

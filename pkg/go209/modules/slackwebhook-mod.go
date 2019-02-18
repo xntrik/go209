@@ -41,7 +41,7 @@ func (sm slackWebhookModule) EnvVars() []string {
 	return []string{"URL"}
 }
 
-func (sm slackWebhookModule) Run(in interface{}, ev map[string]string) error {
+func (sm slackWebhookModule) Run(in interface{}, ev map[string]string, interactions map[string]string) error {
 	if len(ev["SLACKWEBHOOKMODULE_URL"]) == 0 {
 		return errors.New("Missing SlackWebhookModule URL param")
 	}
