@@ -35,11 +35,30 @@ func (tm emailModule) Run(in interface{}, ev map[string]string, interactions map
 
 		Subject := "Email from the go209 slackbot"
 		// Build email
-		emailBody := "go209 slack bot received a complete response from someone.\nHere is the data:\n"
+		emailBody := "go209 slack bot received a complete response from someone.\nHere is the data\n"
+
+		// Extract the user
 		switch i := in.(type) {
 		case map[string]string:
 			for k, v := range i {
-				emailBody = fmt.Sprintf("%s %s\n%s\n\n", emailBody, k, v)
+				if k == "username" {
+					emailBody = fmt.Sprintf("%s %s: %s\n\n", emailBody, k, v)
+				}
+			}
+		}
+
+		// Iterate over interactions, and extract results from the input
+		switch i := in.(type) {
+		case map[string]string:
+			for interactionkey, interactionval := range interactions {
+				for inkey, inval := range i {
+					if strings.HasPrefix(inkey, "response:") {
+						inkey = strings.TrimPrefix(inkey, "response:")
+						if interactionkey == inkey {
+							emailBody = fmt.Sprintf("%s %s: %s\n\n", emailBody, interactionval, inval)
+						}
+					}
+				}
 			}
 		}
 
@@ -78,11 +97,30 @@ func (tm emailModule) Run(in interface{}, ev map[string]string, interactions map
 
 		Subject := "Email from the go209 slackbot"
 		// Build email
-		emailBody := "go209 slack bot received a complete response from someone.\nHere is the data:\n"
+		emailBody := "go209 slack bot received a complete response from someone.\nHere is the data\n"
+
+		// Extract the user
 		switch i := in.(type) {
 		case map[string]string:
 			for k, v := range i {
-				emailBody = fmt.Sprintf("%s %s\n%s\n\n", emailBody, k, v)
+				if k == "username" {
+					emailBody = fmt.Sprintf("%s %s: %s\n\n", emailBody, k, v)
+				}
+			}
+		}
+
+		// Iterate over interactions, and extract results from the input
+		switch i := in.(type) {
+		case map[string]string:
+			for interactionkey, interactionval := range interactions {
+				for inkey, inval := range i {
+					if strings.HasPrefix(inkey, "response:") {
+						inkey = strings.TrimPrefix(inkey, "response:")
+						if interactionkey == inkey {
+							emailBody = fmt.Sprintf("%s %s: %s\n\n", emailBody, interactionval, inval)
+						}
+					}
+				}
 			}
 		}
 
