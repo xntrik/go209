@@ -11,7 +11,7 @@ import (
 )
 
 // PreloadedModules is the list of .so files from the root directory we load by default
-const PreloadedModules = "email-mod"
+const PreloadedModules = "email-mod:slackwebhook-mod"
 
 var modules = LoadedModules{}
 
