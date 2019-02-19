@@ -64,13 +64,17 @@ ENV VARIABLES:
   WEB_ADDR             The web listener address (default: "localhost:8000")
   DYNAMIC_MODULES      Optional .so plugins you want to load (separate with ":")
 
-  EmailModule Module ENV VARIABLES:
+EmailModule Module ENV VARIABLES:
   EMAILMODULE_FROM
   EMAILMODULE_TO
   EMAILMODULE_SMTPSERVER
   EMAILMODULE_USERNAME
   EMAILMODULE_PASSWORD
   EMAILMODULE_SKIPTLS
+
+SlackWebhookModule Module ENV VARIABLES:
+  SLACKWEBHOOKMODULE_URL
+
 ```
 
 To run properly you need to be running:
@@ -354,7 +358,7 @@ In the root of the rules file you can also specify:
 
 #### go209 Modules
 
-Currently go209 supports output modules. These are executed, if configured in your rules.json, to perform arbitrary actions at the completion of a interaction/Q&A. go209 comes with an email module (loaded), and a test module (not loaded).
+Currently go209 supports output modules. These are executed, if configured in your rules.json, to perform arbitrary actions at the completion of a interaction/Q&A. go209 comes with an email module (loaded), slack webhook module (loaded)  and a test module (not loaded).
 
 To write your own, great a .go file in the `pkg/go209/modules/` folder:
 
