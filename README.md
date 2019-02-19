@@ -211,6 +211,26 @@ Responses to these will just be echoed at the terminal, which isn't that useful.
 }
 ```
 
+Another module is the `SlackWebhookModule`, which, if the ENV variable is configured, is able to post the response to a set of interactions to a [Slack Webhook](https://api.slack.com/incoming-webhooks), such that it can be presented in a channel.
+
+```
+{
+  "terms": ["questionnaire"],
+  "response": "A quick questionnaire",
+  "interactions": [
+    {
+      "interaction_id": "qq1",
+      "stop_word": "stop",
+      "type": "text",
+      "question": "Do you like golang?"
+      "next_interaction": "end"
+    }
+  ],
+  "interaction_start": "qq1",
+  "interaction_end_mods": ["EmailModule", "SlackWebhookModule"]
+}
+```
+
 #### Buttons and other slack attachments
 
 Sure, text-based q&a is fun, but what if you want to present and handle buttons or menus.
