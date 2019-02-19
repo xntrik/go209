@@ -37,9 +37,7 @@ ENV VARIABLES:
 	REDIS_DB             REDIS DB (default: 0)
 	JSON_RULES           The rule file (default: "rules.json")
 	WEB_ADDR             The web listener address (default: "localhost:8000")
-	DYNAMIC_MODULES      Optional .so plugins you want to load (separate with ":")
-
-`, cli.AppHelpTemplate)
+	DYNAMIC_MODULES      Optional .so plugins you want to load (separate with ":") `, cli.AppHelpTemplate)
 
 	// Check for additional app help for module ENV VARS
 	tmpMods := go209.FetchMods()
@@ -49,7 +47,9 @@ ENV VARIABLES:
 	for _, mod := range tmpMods.Modules {
 		if len(mod.EnvVars()) > 0 {
 			// this module has env vars
-			modEnvVarHelp = fmt.Sprintf(`%s %s Module ENV VARIABLES:`, modEnvVarHelp, mod.Name())
+			modEnvVarHelp = fmt.Sprintf(`%s
+
+%s Module ENV VARIABLES:`, modEnvVarHelp, mod.Name())
 
 			for _, ev := range mod.EnvVars() {
 				adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
