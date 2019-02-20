@@ -25,6 +25,9 @@ const TemplatePreParserRegex = `\[\[[\w+\|\|]+\w+\]\]`
 // RedisDefaultExpiration is the default period of time a redis state should last for
 // slack has a 30 min window for interactive messages and the response_url
 // even though we don't use the response_url, let's set the timeout slightly shorter
+//
+// @TODO: Should this be much much shorter, like, 5 minutes?
+// How long is an interaction meant to take?
 const RedisDefaultExpiration = "29m"
 
 // SlackUser is only used for template parsing
