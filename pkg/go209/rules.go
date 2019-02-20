@@ -27,6 +27,17 @@ type Rule struct {
 	Interactions       []Interaction    `json:"interactions,omitempty"`
 	InteractionStart   string           `json:"interaction_start,omitempty"`
 	InteractionEndMods []string         `json:"interaction_end_mods,omitempty"`
+	SubTerms           []SubTerm        `json:"subterms,omitempty"`
+}
+
+// SubTerm defines the mapping of a sub-search term
+// The idea is that if a Rule is kicked off, we keep state, and allow
+// secondary or more, search terms, offering simple responses. These are
+// different from Interactions in that we aren't storing state to report
+// anything back.
+type SubTerm struct {
+	SearchTerms []string `json:"terms"`
+	Response    string   `json:"response,omitempty"`
 }
 
 // Interaction defines our interactions we want to present (and handle) from
@@ -134,6 +145,13 @@ func parseRuleFile(fileLoc string) (*RuleSet, error) {
 					return nil, fmt.Errorf("Attachment's callback_id doesn't match the interaction_id: %s", interaction.InteractionID)
 				}
 			}
+		}
+	}
+
+	// check to ensure a rule doesn't have both Interactions AND SubTerms
+	for _, rule := range rules.Rules {
+		if len(rule.Interactions) > 0 && len(rule.SubTerms) > 0 {
+			return nil, fmt.Errorf("A rule has both Interactions and SubTerms, it can only have one or the other: %s", rule.SearchTerms)
 		}
 	}
 
