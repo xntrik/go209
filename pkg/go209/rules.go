@@ -36,8 +36,9 @@ type Rule struct {
 // different from Interactions in that we aren't storing state to report
 // anything back.
 type SubTerm struct {
-	SearchTerms []string `json:"terms"`
-	Response    string   `json:"response,omitempty"`
+	SearchTerms []string  `json:"terms"`
+	Response    string    `json:"response,omitempty"`
+	SubTerms    []SubTerm `json:"subterms,omitempty"`
 }
 
 // Interaction defines our interactions we want to present (and handle) from

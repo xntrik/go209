@@ -22,14 +22,6 @@ import (
 // TemplatePreParserRegex is the regular expression to parse our template pre-parser
 const TemplatePreParserRegex = `\[\[[\w+\|\|]+\w+\]\]`
 
-// RedisDefaultExpiration is the default period of time a redis state should last for
-// slack has a 30 min window for interactive messages and the response_url
-// even though we don't use the response_url, let's set the timeout slightly shorter
-//
-// @TODO: Should this be much much shorter, like, 5 minutes?
-// How long is an interaction meant to take?
-const RedisDefaultExpiration = "29m"
-
 // SlackUser is only used for template parsing
 type SlackUser struct {
 	Username string
@@ -121,72 +113,6 @@ func parseTemplate(templatetext, username, userid string) (string, error) {
 	return buf.String(), nil
 }
 
-// newState takes the user and interaction and saves the state
-// This occurs at the start of an interaction
-func newState(db *redis.Client, redKey, user, username string, interaction *Interaction) error {
-	err := db.HSet(redKey, "interaction", interaction.InteractionID).Err()
-	if err != nil {
-		return fmt.Errorf("Error setting new hash: %s", err)
-	}
-
-	dur, err := time.ParseDuration(RedisDefaultExpiration)
-	if err != nil {
-		return fmt.Errorf("Couldn't parse duration for redis expiry: %s", err)
-	}
-
-	err = db.Expire(redKey, dur).Err()
-	if err != nil {
-		return fmt.Errorf("Error expiring hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "stop_word", interaction.StopWord).Err()
-	if err != nil {
-		return fmt.Errorf("Error adding new key to hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "userid", user).Err()
-	if err != nil {
-		return fmt.Errorf("Error adding new key to hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "username", username).Err()
-	if err != nil {
-		return fmt.Errorf("Error adding new key to hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "type", interaction.Type).Err()
-	if err != nil {
-		return fmt.Errorf("Error adding new key to hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "next_interaction", interaction.NextInteraction).Err()
-	if err != nil {
-		return fmt.Errorf("Error adding new key to hash: %s", err)
-	}
-
-	return nil
-}
-
-// updateState occurs within a set of interactions, and updates the redis state
-func updateState(db *redis.Client, redKey string, interaction *Interaction) error {
-	err := db.HSet(redKey, "interaction", interaction.InteractionID).Err()
-	if err != nil {
-		return fmt.Errorf("Error updating hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "type", interaction.Type).Err()
-	if err != nil {
-		return fmt.Errorf("Error updating hash: %s", err)
-	}
-
-	err = db.HSet(redKey, "next_interaction", interaction.NextInteraction).Err()
-	if err != nil {
-		return fmt.Errorf("Error updating hash: %s", err)
-	}
-
-	return nil
-}
-
 // handleDM handled all the slack.MessageEvents that the bot receives
 // Messages presented here have already been validated by respondToDM to ensure
 // the bot only responds to what it should
@@ -256,6 +182,16 @@ func handleDM(rtm *slack.RTM, rules *RuleSet, msg, team, channel, user, username
 						}
 					}
 
+					// If there's subterms in the rule, let's set the state to handle it
+					if len(rule.SubTerms) > 0 {
+						err := newSubTermState(db, redKey, msg)
+						if err != nil {
+							log.Fatal(fmt.Sprintf("Error saving state: %s", err))
+						}
+
+						log.Info(fmt.Sprintf("Set state to handle sub search terms from '%s' to %s (%s)", term, username, user))
+					}
+
 					// if we find a matching rule, we process it and return
 					// this also means that we don't handle duplicate rules.
 					return
@@ -277,76 +213,66 @@ func handleDM(rtm *slack.RTM, rules *RuleSet, msg, team, channel, user, username
 	} else {
 		// Because we found a valid state in redis,  we are within an interaction now!
 
-		// If the message is the stop-word, kill the session and send the interaction
-		// cancelled message
-		if msg == val["stop_word"] {
-			err = db.Del(redKey).Err()
+		if _, ok := val["searchTerm"]; ok == true {
+			// This is a sub-term state
+
+			// Let's find the rule from the stored state
+			for _, rule := range rules.Rules {
+				for _, term := range rule.SearchTerms {
+					if strings.Contains(val["searchTerm"], term) {
+						// Found the matching rule, now let's check for subterms
+						if len(rule.SubTerms) > 0 {
+							msg = strings.ToLower(msg)
+							foundSubTerm := false
+
+							for _, subTerm := range rule.SubTerms {
+								for _, subTermSearch := range subTerm.SearchTerms {
+									if strings.Contains(msg, subTermSearch) {
+										// We found a hit
+										foundSubTerm = true
+										// If there's a response in the rule, send it now.
+										if len(subTerm.Response) > 0 {
+											resp := preParseTemplate(subTerm.Response, re)
+											resp, err := parseTemplate(resp, username, user)
+											if err != nil {
+												log.Warn(fmt.Sprintf("Error parsing template: %s", err))
+											}
+
+											log.Info(fmt.Sprintf("Sending sub-term response to search term '%s'/'%s' to %s (%s)", val["searchTerm"], subTermSearch, username, user))
+											rtm.PostMessage(channel, slack.MsgOptionText(resp, false))
+										}
+									}
+								}
+							}
+
+							if foundSubTerm == false {
+								// no sub-term found, send a default response
+								log.Info(fmt.Sprintf("No sub-term found to search term '%s'/'%s' to %s (%s)", val["searchTerm"], msg, username, user))
+								rtm.PostMessage(channel, slack.MsgOptionText("Sorry, couldn't help you", false))
+							}
+						}
+					}
+				}
+			}
+			// We always delete the state now
+			err := db.Del(redKey).Err()
 			if err != nil {
 				log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
 			}
-			log.Info(fmt.Sprintf("User %s (%s) has cancelled interaction %s", username, user, val["interaction"]))
-			if len(rules.InteractionCancelledResponse) > 0 {
-				// We have a JSON rule to parse and respond with
-				resp := preParseTemplate(rules.InteractionCancelledResponse, re)
-
-				resp, err = parseTemplate(resp, username, user)
-				if err != nil {
-					log.Warn(fmt.Sprintf("Error parsing template: %s", err))
-				}
-				rtm.PostMessage(channel, slack.MsgOptionText(resp, false))
-
-			} else {
-				rtm.PostMessage(channel, slack.MsgOptionText("Interaction cancelled", false))
-			}
 		} else {
-			// The message wasn't the stop-word, we're going to save the response into redis
-			err = db.HSet(redKey, fmt.Sprintf("response:%s", val["interaction"]), msg).Err()
-			if err != nil {
-				log.Fatal(fmt.Sprintf("Error saving response into hash: %s", err))
-			}
+			// We are assuming we're now in an interaction state
 
-			log.Info(fmt.Sprintf("User %s (%s) has responded to an interaction %s", username, user, val["interaction"]))
-
-			// Determine if this was the last interaction in the rule
-			if val["next_interaction"] != "end" {
-				// This was not the last interaction (because the next isn't 'end')
-				// Because there is another, we have to load it up, and then update the state
-				// and then send the interaction to the user
-
-				nextinteraction, err := rules.findInteractionByID(val["next_interaction"])
-				if err != nil {
-					log.Fatal(fmt.Sprintf("Error getting the next interaction: %s", err))
-				}
-				// We should probably throw a hard error above
-				err = updateState(db, redKey, nextinteraction)
-				if err != nil {
-					log.Fatal(fmt.Sprintf("Error updating the state: %s", err))
-				}
-
-				// time to ask the next question
-				switch nextinteraction.Type {
-				case "text":
-					rtm.PostMessage(channel, slack.MsgOptionText(nextinteraction.Question, false))
-				case "attachment":
-					if len(nextinteraction.Question) > 0 {
-						rtm.PostMessage(channel, slack.MsgOptionText(nextinteraction.Question, false))
-					}
-					rtm.PostMessage(channel, slack.MsgOptionAttachments(nextinteraction.Attachment))
-				}
-			} else {
-				// This is now after receiving text after the *final* interaction
-				// We will store the result, then clear the state and handle the response
-				finalval, err := db.HGetAll(redKey).Result()
-				log.Info(fmt.Sprintf("User %s (%s) has completed all interactions, final step %s", username, user, finalval["interaction"]))
-				log.Info(fmt.Sprintf("Interaction RESULT:\n%v", finalval))
+			// If the message is the stop-word, kill the session and send the interaction
+			// cancelled message
+			if msg == val["stop_word"] {
 				err = db.Del(redKey).Err()
 				if err != nil {
 					log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
 				}
-
-				if len(rules.InteractionCompleteResponse) > 0 {
+				log.Info(fmt.Sprintf("User %s (%s) has cancelled interaction %s", username, user, val["interaction"]))
+				if len(rules.InteractionCancelledResponse) > 0 {
 					// We have a JSON rule to parse and respond with
-					resp := preParseTemplate(rules.InteractionCompleteResponse, re)
+					resp := preParseTemplate(rules.InteractionCancelledResponse, re)
 
 					resp, err = parseTemplate(resp, username, user)
 					if err != nil {
@@ -355,48 +281,108 @@ func handleDM(rtm *slack.RTM, rules *RuleSet, msg, team, channel, user, username
 					rtm.PostMessage(channel, slack.MsgOptionText(resp, false))
 
 				} else {
-					rtm.PostMessage(channel, slack.MsgOptionText("Thanks! We'll get back to you soon", false))
+					rtm.PostMessage(channel, slack.MsgOptionText("Interaction cancelled", false))
+				}
+			} else {
+				// The message wasn't the stop-word, we're going to save the response into redis
+				err = db.HSet(redKey, fmt.Sprintf("response:%s", val["interaction"]), msg).Err()
+				if err != nil {
+					log.Fatal(fmt.Sprintf("Error saving response into hash: %s", err))
 				}
 
-				// now we check for any modules we need to parse for this rule
-				thisRule, err := rules.findRuleByID(finalval["interaction"])
-				if err != nil {
-					log.Warn(fmt.Sprintf("Couldn't find rule: %s", err))
+				log.Info(fmt.Sprintf("User %s (%s) has responded to an interaction %s", username, user, val["interaction"]))
+
+				// Determine if this was the last interaction in the rule
+				if val["next_interaction"] != "end" {
+					// This was not the last interaction (because the next isn't 'end')
+					// Because there is another, we have to load it up, and then update the state
+					// and then send the interaction to the user
+
+					nextinteraction, err := rules.findInteractionByID(val["next_interaction"])
+					if err != nil {
+						log.Fatal(fmt.Sprintf("Error getting the next interaction: %s", err))
+					}
+					// We should probably throw a hard error above
+					err = updateState(db, redKey, nextinteraction)
+					if err != nil {
+						log.Fatal(fmt.Sprintf("Error updating the state: %s", err))
+					}
+
+					// time to ask the next question
+					switch nextinteraction.Type {
+					case "text":
+						rtm.PostMessage(channel, slack.MsgOptionText(nextinteraction.Question, false))
+					case "attachment":
+						if len(nextinteraction.Question) > 0 {
+							rtm.PostMessage(channel, slack.MsgOptionText(nextinteraction.Question, false))
+						}
+						rtm.PostMessage(channel, slack.MsgOptionAttachments(nextinteraction.Attachment))
+					}
 				} else {
-					// we have the rule, and therefore can check for end mods
-					if len(thisRule.InteractionEndMods) > 0 {
-						log.Debug(fmt.Sprintf("We found %d modules to run", len(thisRule.InteractionEndMods)))
+					// This is now after receiving text after the *final* interaction
+					// We will store the result, then clear the state and handle the response
+					finalval, err := db.HGetAll(redKey).Result()
+					log.Info(fmt.Sprintf("User %s (%s) has completed all interactions, final step %s", username, user, finalval["interaction"]))
+					log.Info(fmt.Sprintf("Interaction RESULT:\n%v", finalval))
+					err = db.Del(redKey).Err()
+					if err != nil {
+						log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
+					}
 
-						for _, endModName := range thisRule.InteractionEndMods {
-							foundMod := false
-							for _, mod := range modules.Modules {
-								if endModName == mod.Name() {
-									foundMod = true
-									log.Debug(fmt.Sprintf("We found %s module to run", mod.Name()))
+					if len(rules.InteractionCompleteResponse) > 0 {
+						// We have a JSON rule to parse and respond with
+						resp := preParseTemplate(rules.InteractionCompleteResponse, re)
 
-									// Fetch the modules ENV VARs
-									evSet := make(map[string]string)
-									for _, ev := range mod.EnvVars() {
-										adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
-										evSet[adjusted] = os.Getenv(adjusted)
-									}
+						resp, err = parseTemplate(resp, username, user)
+						if err != nil {
+							log.Warn(fmt.Sprintf("Error parsing template: %s", err))
+						}
+						rtm.PostMessage(channel, slack.MsgOptionText(resp, false))
 
-									// Set the interactions
-									interactions := make(map[string]string)
-									for _, i := range thisRule.Interactions {
-										interactions[i.InteractionID] = i.Question
-									}
+					} else {
+						rtm.PostMessage(channel, slack.MsgOptionText("Thanks! We'll get back to you soon", false))
+					}
 
-									// Running the module
-									err = mod.Run(finalval, evSet, interactions)
-									if err != nil {
-										log.Warn(fmt.Sprintf("Error running module: %s", err))
+					// now we check for any modules we need to parse for this rule
+					thisRule, err := rules.findRuleByID(finalval["interaction"])
+					if err != nil {
+						log.Warn(fmt.Sprintf("Couldn't find rule: %s", err))
+					} else {
+						// we have the rule, and therefore can check for end mods
+						if len(thisRule.InteractionEndMods) > 0 {
+							log.Debug(fmt.Sprintf("We found %d modules to run", len(thisRule.InteractionEndMods)))
+
+							for _, endModName := range thisRule.InteractionEndMods {
+								foundMod := false
+								for _, mod := range modules.Modules {
+									if endModName == mod.Name() {
+										foundMod = true
+										log.Debug(fmt.Sprintf("We found %s module to run", mod.Name()))
+
+										// Fetch the modules ENV VARs
+										evSet := make(map[string]string)
+										for _, ev := range mod.EnvVars() {
+											adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
+											evSet[adjusted] = os.Getenv(adjusted)
+										}
+
+										// Set the interactions
+										interactions := make(map[string]string)
+										for _, i := range thisRule.Interactions {
+											interactions[i.InteractionID] = i.Question
+										}
+
+										// Running the module
+										err = mod.Run(finalval, evSet, interactions)
+										if err != nil {
+											log.Warn(fmt.Sprintf("Error running module: %s", err))
+										}
 									}
 								}
-							}
 
-							if foundMod == false {
-								log.Warn(fmt.Sprintf("Referenced module not found: %s", endModName))
+								if foundMod == false {
+									log.Warn(fmt.Sprintf("Referenced module not found: %s", endModName))
+								}
 							}
 						}
 					}
