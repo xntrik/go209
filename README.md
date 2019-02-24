@@ -212,6 +212,18 @@ There's a bit to unravel. If in your rule, you add an `interactions` array, you 
 
 You have to ensure at least one interaction has the `next_interaction` set to `end`, otherwise it'll never finish, and that would be dreadful.
 
+If you want to send a final response to an interaction, set the `type` interaction attribute to `finaltext`, and set a `response` instead of a `question`. For example:
+
+```
+{
+  "interaction_id": "q3",
+  "stop_word": "stop",
+  "type": "finaltext",
+  "response": "Great work!",
+  "next_interaction": "end"
+}
+```
+
 #### Kicking off a Dynamic Module at the end of a set of interactions
 
 Responses to these will just be echoed at the terminal, which isn't that useful. This is where modules can come into play. You can read more about modules below, but a default module includes the `EmailModule`. If you start go209 with correct `EMAILMODULE` ENV VARs, you can then adjust your rules to run a dynamic module at the end of the question/answers.
