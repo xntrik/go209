@@ -79,6 +79,72 @@ func slackRespondWithAttachment(w http.ResponseWriter, replace bool, message str
 	return nil
 }
 
+func finalizeWebInteraction(db *redis.Client, redKey, username, userid, cbID, selected, finaltext string, rules *RuleSet, w http.ResponseWriter) {
+	finalval, err := db.HGetAll(redKey).Result()
+	log.Info(fmt.Sprintf("User %s (%s) has completed all interactions, final step %s", username, userid, cbID))
+	log.Info(fmt.Sprintf("Interaction RESULT:\n%v", finalval))
+	err = db.Del(redKey).Err()
+	if err != nil {
+		log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
+	}
+	if len(finaltext) == 0 {
+		err = slackRespond(w, true, fmt.Sprintf("You selected: %s\nThanks! We'll get back to you soon", selected))
+		if err != nil {
+			log.Warn(fmt.Sprintf("Error responding to slack message: %s", err))
+		}
+	} else {
+		err = slackRespond(w, true, fmt.Sprintf("You selected: %s\n%s\nThanks! We'll get back to you soon", selected, finaltext))
+		if err != nil {
+			log.Warn(fmt.Sprintf("Error responding to slack message: %s", err))
+		}
+
+	}
+
+	// now we check for any modules we need to parse for this rule
+	thisRule, err := rules.findRuleByID(finalval["interaction"])
+	if err != nil {
+		log.Warn(fmt.Sprintf("Couldn't find rule: %s", err))
+	} else {
+		// we have the rule, and therefore can check for end mods
+		if len(thisRule.InteractionEndMods) > 0 {
+			log.Debug(fmt.Sprintf("We found %d modules to run", len(thisRule.InteractionEndMods)))
+
+			for _, endModName := range thisRule.InteractionEndMods {
+				foundMod := false
+				for _, mod := range modules.Modules {
+					if endModName == mod.Name() {
+						foundMod = true
+						log.Debug(fmt.Sprintf("We found %s module to run", mod.Name()))
+
+						// Fetch the modules ENV VARs
+						evSet := make(map[string]string)
+						for _, ev := range mod.EnvVars() {
+							adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
+							evSet[adjusted] = os.Getenv(adjusted)
+						}
+
+						// Set the interactions
+						interactions := make(map[string]string)
+						for _, i := range thisRule.Interactions {
+							interactions[i.InteractionID] = i.Question
+						}
+
+						// Running the module
+						err = mod.Run(finalval, evSet, interactions)
+						if err != nil {
+							log.Warn(fmt.Sprintf("Error running module: %s", err))
+						}
+					}
+				}
+
+				if foundMod == false {
+					log.Warn(fmt.Sprintf("Referenced module not found: %s", endModName))
+				}
+			}
+		}
+	}
+}
+
 // messageHandler handles all the incoming Slack web hooks
 func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -211,64 +277,12 @@ func messageHandler(cfg *BotConfig, db *redis.Client, rules *RuleSet) http.Handl
 					if err != nil {
 						log.Warn(fmt.Sprintf("Error responding to slack message: %s", err))
 					}
+				case "finaltext":
+					finalizeWebInteraction(db, redKey, val["username"], val["userid"], cbID, selected, nextinteraction.Response, rules, w)
 				}
 			} else {
 				// This is the last interaction
-				finalval, err := db.HGetAll(redKey).Result()
-				log.Info(fmt.Sprintf("User %s (%s) has completed all interactions, final step %s", val["username"], val["userid"], cbID))
-				log.Info(fmt.Sprintf("Interaction RESULT:\n%v", finalval))
-				err = db.Del(redKey).Err()
-				if err != nil {
-					log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
-				}
-				err = slackRespond(w, true, fmt.Sprintf("You selected: %s\nThanks! We'll get back to you soon", selected))
-				if err != nil {
-					log.Warn(fmt.Sprintf("Error responding to slack message: %s", err))
-				}
-
-				// now we check for any modules we need to parse for this rule
-				thisRule, err := rules.findRuleByID(finalval["interaction"])
-				if err != nil {
-					log.Warn(fmt.Sprintf("Couldn't find rule: %s", err))
-				} else {
-					// we have the rule, and therefore can check for end mods
-					if len(thisRule.InteractionEndMods) > 0 {
-						log.Debug(fmt.Sprintf("We found %d modules to run", len(thisRule.InteractionEndMods)))
-
-						for _, endModName := range thisRule.InteractionEndMods {
-							foundMod := false
-							for _, mod := range modules.Modules {
-								if endModName == mod.Name() {
-									foundMod = true
-									log.Debug(fmt.Sprintf("We found %s module to run", mod.Name()))
-
-									// Fetch the modules ENV VARs
-									evSet := make(map[string]string)
-									for _, ev := range mod.EnvVars() {
-										adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
-										evSet[adjusted] = os.Getenv(adjusted)
-									}
-
-									// Set the interactions
-									interactions := make(map[string]string)
-									for _, i := range thisRule.Interactions {
-										interactions[i.InteractionID] = i.Question
-									}
-
-									// Running the module
-									err = mod.Run(finalval, evSet, interactions)
-									if err != nil {
-										log.Warn(fmt.Sprintf("Error running module: %s", err))
-									}
-								}
-							}
-
-							if foundMod == false {
-								log.Warn(fmt.Sprintf("Referenced module not found: %s", endModName))
-							}
-						}
-					}
-				}
+				finalizeWebInteraction(db, redKey, val["username"], val["userid"], cbID, selected, "", rules, w)
 			}
 		}
 	})

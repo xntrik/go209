@@ -48,6 +48,7 @@ type Interaction struct {
 	InteractionID          string           `json:"interaction_id"`
 	StopWord               string           `json:"stop_word"`
 	Type                   string           `json:"type"`
+	Response               string           `json:"response,omitempty"`
 	Question               string           `json:"question,omitempty"`
 	NextInteraction        string           `json:"next_interaction"`
 	Attachment             slack.Attachment `json:"attachment,omitempty"`

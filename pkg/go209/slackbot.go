@@ -2,31 +2,18 @@
 package go209
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	stdlog "log"
-	"math/rand"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
-	"text/template"
-	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/nlopes/slack"
 	log "github.com/sirupsen/logrus"
 )
-
-// TemplatePreParserRegex is the regular expression to parse our template pre-parser
-const TemplatePreParserRegex = `\[\[[\w+\|\|]+\w+\]\]`
-
-// SlackUser is only used for template parsing
-type SlackUser struct {
-	Username string
-	UserID   string
-}
 
 // respondToDM determines whether the bot should respond to a MessageEvent
 // This function will return true if the bot should respond.
@@ -59,58 +46,72 @@ func respondToDM(ev *slack.MessageEvent) bool {
 	return true
 }
 
-// preParseTemplate parses strings looking for:
-// [[word||word||word]] and will randomly select one of the words
-// This function will do this for all instances of [[ ]] in a template
-// This happens before the template parsing performed by parseTemplate
-func preParseTemplate(templatetext string, re *regexp.Regexp) string {
-	result := templatetext
-	match := re.FindAllStringSubmatchIndex(result, -1)
-	for i := len(match) - 1; i >= 0; i-- {
-		extract := result[match[i][0]+2 : match[i][1]-2]
-		splitExtract := strings.Split(extract, "||")
-		if len(splitExtract) > 1 {
-			var b strings.Builder
-			b.Grow(len(templatetext))
+func finalizeInteraction(redKey, channel, username, user string, db *redis.Client, rules *RuleSet, re *regexp.Regexp, rtm *slack.RTM) {
+	finalval, err := db.HGetAll(redKey).Result()
+	log.Info(fmt.Sprintf("User %s (%s) has completed all interactions, final step %s", username, user, finalval["interaction"]))
+	log.Info(fmt.Sprintf("Interaction RESULT:\n%v", finalval))
+	err = db.Del(redKey).Err()
+	if err != nil {
+		log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
+	}
 
-			s1 := rand.NewSource(time.Now().UnixNano())
-			r1 := rand.New(s1)
-			rando := r1.Intn(len(splitExtract))
-			randoword := splitExtract[rando]
+	if len(rules.InteractionCompleteResponse) > 0 {
+		// We have a JSON rule to parse and respond with
+		resp := preParseTemplate(rules.InteractionCompleteResponse, re)
 
-			fmt.Fprintf(&b, result[:match[i][0]])
-			fmt.Fprintf(&b, randoword)
-			fmt.Fprintf(&b, result[match[i][1]:])
+		resp, err = parseTemplate(resp, username, user)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Error parsing template: %s", err))
+		}
+		rtm.PostMessage(channel, slack.MsgOptionText(resp, false))
 
-			result = b.String()
+	} else {
+		rtm.PostMessage(channel, slack.MsgOptionText("Thanks! We'll get back to you soon", false))
+	}
+
+	// now we check for any modules we need to parse for this rule
+	thisRule, err := rules.findRuleByID(finalval["interaction"])
+	if err != nil {
+		log.Warn(fmt.Sprintf("Couldn't find rule: %s", err))
+	} else {
+		// we have the rule, and therefore can check for end mods
+		if len(thisRule.InteractionEndMods) > 0 {
+			log.Debug(fmt.Sprintf("We found %d modules to run", len(thisRule.InteractionEndMods)))
+
+			for _, endModName := range thisRule.InteractionEndMods {
+				foundMod := false
+				for _, mod := range modules.Modules {
+					if endModName == mod.Name() {
+						foundMod = true
+						log.Debug(fmt.Sprintf("We found %s module to run", mod.Name()))
+
+						// Fetch the modules ENV VARs
+						evSet := make(map[string]string)
+						for _, ev := range mod.EnvVars() {
+							adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
+							evSet[adjusted] = os.Getenv(adjusted)
+						}
+
+						// Set the interactions
+						interactions := make(map[string]string)
+						for _, i := range thisRule.Interactions {
+							interactions[i.InteractionID] = i.Question
+						}
+
+						// Running the module
+						err = mod.Run(finalval, evSet, interactions)
+						if err != nil {
+							log.Warn(fmt.Sprintf("Error running module: %s", err))
+						}
+					}
+				}
+
+				if foundMod == false {
+					log.Warn(fmt.Sprintf("Referenced module not found: %s", endModName))
+				}
+			}
 		}
 	}
-	return result
-}
-
-// parseTemplate will use text/template to parse the provided string
-// The only attributes we're running through the template are the slack user's:
-// * username
-// * userid
-//
-// Therefore the only template items you should include in your rules are:
-// {{.Username}} or {{.UserID}}
-func parseTemplate(templatetext, username, userid string) (string, error) {
-	u := SlackUser{username, userid}
-
-	templ := template.New("dmtemplate")
-	templ, err := templ.Parse(templatetext)
-	if err != nil {
-		return "", err
-	}
-
-	buf := new(bytes.Buffer)
-	err = templ.Execute(buf, u)
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
 }
 
 // handleDM handled all the slack.MessageEvents that the bot receives
@@ -179,6 +180,9 @@ func handleDM(rtm *slack.RTM, rules *RuleSet, msg, team, channel, user, username
 								rtm.PostMessage(channel, slack.MsgOptionText(interaction.Question, false))
 							}
 							rtm.PostMessage(channel, slack.MsgOptionAttachments(interaction.Attachment))
+						case "finaltext":
+							rtm.PostMessage(channel, slack.MsgOptionText(interaction.Response, false))
+							finalizeInteraction(redKey, channel, username, user, db, rules, re, rtm)
 						}
 					}
 
@@ -317,75 +321,14 @@ func handleDM(rtm *slack.RTM, rules *RuleSet, msg, team, channel, user, username
 							rtm.PostMessage(channel, slack.MsgOptionText(nextinteraction.Question, false))
 						}
 						rtm.PostMessage(channel, slack.MsgOptionAttachments(nextinteraction.Attachment))
+					case "finaltext":
+						rtm.PostMessage(channel, slack.MsgOptionText(nextinteraction.Response, false))
+						finalizeInteraction(redKey, channel, username, user, db, rules, re, rtm)
 					}
 				} else {
 					// This is now after receiving text after the *final* interaction
 					// We will store the result, then clear the state and handle the response
-					finalval, err := db.HGetAll(redKey).Result()
-					log.Info(fmt.Sprintf("User %s (%s) has completed all interactions, final step %s", username, user, finalval["interaction"]))
-					log.Info(fmt.Sprintf("Interaction RESULT:\n%v", finalval))
-					err = db.Del(redKey).Err()
-					if err != nil {
-						log.Warn(fmt.Sprintf("Error deleting hash: %s", err))
-					}
-
-					if len(rules.InteractionCompleteResponse) > 0 {
-						// We have a JSON rule to parse and respond with
-						resp := preParseTemplate(rules.InteractionCompleteResponse, re)
-
-						resp, err = parseTemplate(resp, username, user)
-						if err != nil {
-							log.Warn(fmt.Sprintf("Error parsing template: %s", err))
-						}
-						rtm.PostMessage(channel, slack.MsgOptionText(resp, false))
-
-					} else {
-						rtm.PostMessage(channel, slack.MsgOptionText("Thanks! We'll get back to you soon", false))
-					}
-
-					// now we check for any modules we need to parse for this rule
-					thisRule, err := rules.findRuleByID(finalval["interaction"])
-					if err != nil {
-						log.Warn(fmt.Sprintf("Couldn't find rule: %s", err))
-					} else {
-						// we have the rule, and therefore can check for end mods
-						if len(thisRule.InteractionEndMods) > 0 {
-							log.Debug(fmt.Sprintf("We found %d modules to run", len(thisRule.InteractionEndMods)))
-
-							for _, endModName := range thisRule.InteractionEndMods {
-								foundMod := false
-								for _, mod := range modules.Modules {
-									if endModName == mod.Name() {
-										foundMod = true
-										log.Debug(fmt.Sprintf("We found %s module to run", mod.Name()))
-
-										// Fetch the modules ENV VARs
-										evSet := make(map[string]string)
-										for _, ev := range mod.EnvVars() {
-											adjusted := strings.ToUpper(fmt.Sprintf("%s_%s", mod.Name(), ev))
-											evSet[adjusted] = os.Getenv(adjusted)
-										}
-
-										// Set the interactions
-										interactions := make(map[string]string)
-										for _, i := range thisRule.Interactions {
-											interactions[i.InteractionID] = i.Question
-										}
-
-										// Running the module
-										err = mod.Run(finalval, evSet, interactions)
-										if err != nil {
-											log.Warn(fmt.Sprintf("Error running module: %s", err))
-										}
-									}
-								}
-
-								if foundMod == false {
-									log.Warn(fmt.Sprintf("Referenced module not found: %s", endModName))
-								}
-							}
-						}
-					}
+					finalizeInteraction(redKey, channel, username, user, db, rules, re, rtm)
 				}
 			}
 		}
