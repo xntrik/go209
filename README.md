@@ -161,6 +161,25 @@ You can also spice up your responses by using limited randomness and references.
 }
 ```
 
+If you want to add a single-layer of sub-search terms, you can do that too.
+
+```
+{
+  "terms": ["first term"],
+  "response": "Cool, did you mean the first or second term?",
+  "subterms": [
+    {
+      "terms": ["first"],
+      "response": "Cool, this is the first"
+    },
+    {
+      "terms": ["second"],
+      "response": "Cool, this is the second"
+    }
+  ]
+}
+```
+
 #### Text base question / answers
 
 If you want go209 to ask questions, and store the results:
